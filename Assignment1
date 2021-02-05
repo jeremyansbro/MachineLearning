@@ -1,0 +1,349 @@
+library(caret)
+library(glmnet)
+library(mlbench)
+library(psych)
+library(corrr)
+library(corrplot)
+library(gridExtra)
+library(ggplot2)
+library(tidyverse)
+library(leaps)
+
+
+
+#Bring in Boston Housing data, call it data
+
+data("BostonHousing")
+fulldata <- BostonHousing
+str(fulldata)
+dim(fulldata)
+sum(is.na(fulldata))
+
+#Check the distributions of the data
+
+summary(fulldata)
+
+#Create boxplots to see outliers and visualise the distributions
+
+fulldata[-4] %>%
+  gather(-medv, key = "var", value = "value") %>%
+  filter(var != "chas") %>%
+  ggplot(aes(x = '',y = value)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
+  facet_wrap(~ var, scales = "free") +
+  theme_bw()
+
+fulldata[-4]%>%
+  gather(-medv, key = "var", value = "value") %>%
+  filter(var != "chas") %>%
+  ggplot(aes(x = value)) +
+  geom_histogram() +
+  facet_wrap(~ var, scales = "free") +
+  theme_bw()
+
+#Check distribution of response
+
+qplot(x=medv,data=fulldata,geom='histogram')
+
+#Check numeric correlations between response and predictors
+
+fulldata[c(-4)] %>% correlate() %>% focus(medv)
+
+#Compare plots to check for collinearity among predictors
+
+pairs.panels(fulldata[c(-4)])
+
+#Run full linear model
+
+options(scipen=0)
+
+model1 <- lm(medv ~ ., data = fulldata)
+sum.model1 <- summary(model1)
+summary(model1)
+
+#Check model statistics for model 1
+
+model1.mse <- (sum.model1$sigma)^2
+model1.rsq <- sum.model1$r.squared
+model1.arsq <- sum.model1$adj.r.squared
+model1.aic <- AIC(model1)
+model1.bic <- BIC(model1)
+
+stats.model1 <- c("full", model1.mse, model1.rsq, model1.arsq,
+                  model1.aic, model1.bic)
+
+table_model1 <- c("model type", "MSE", "R-Squared", 
+                  "Adjusted R-Squared", "AIC", "BIC")
+data.frame(cbind(table_model1, stats.model1))
+
+#Use subset selection to select variables
+
+best <- regsubsets(medv ~., fulldata, nvmax = 13)
+results_best <- summary(best)
+names(results_best)
+results_best
+
+RSS_best <- results_best$rss
+R2_best <- results_best$rsq
+AR2_best <- results_best$adjr2
+Cp_best <- results_best$cp
+BIC_best <- results_best$bic
+AIC_best <- results_best$aic
+
+cbind(RSS_best, R2_best, AR2_best, Cp_best,
+      BIC_best, AIC_best)
+
+#Plot the RSS and R-square graphs to show the inverse relationship
+
+par(mfrow = c(1,2))
+plot(RSS_best, xlab = 'Number of Predictors',
+     ylab = 'Best Subset RSS', type='l', lwd = 2)
+plot(R2_best, xlab = 'Number of Predictors',
+     ylab = 'R-square', type='l', lwd=2)
+
+#Find which are the optimal models using best subset
+
+which.min(Cp_best)
+which.min(BIC_best)
+which.max(AR2_best)
+
+#Plot the optimal model criterion
+
+par(mfrow = c(1, 3))
+plot(Cp_best, xlab = "Number of Predictors", ylab = "Cp", type = 'l', lwd = 2)
+points(11, Cp_best[11], col = "red", cex = 2, pch = 8, lwd = 2)
+plot(BIC_best, xlab = "Number of Predictors", ylab = "BIC", main ='Best Subset Optimal Criterion', type = 'l', lwd = 2)
+points(11, BIC_best[11], col = "red", cex = 2, pch = 8, lwd = 2)
+plot(AR2_best, xlab = "Number of Predictors", ylab = "Adjusted RSq", type = "l", lwd = 2)
+points(11, AR2_best[11], col = "red", cex = 2, pch = 8, lwd = 2)
+
+#Use forward stepwise selection to see if it agrees with best subset
+
+forward <- regsubsets(medv ~., fulldata, nvmax = 13, method = "forward")
+results_forward <- summary(forward)
+names(results_forward)
+summary(forward)
+
+RSS_forward <- results_forward$rss
+R2_forward <- results_forward$rsq
+AR2_forward <- results_forward$adjr2
+Cp_forward <- results_forward$cp
+BIC_forward <- results_forward$bic
+AIC_forward <- results_forward$aic
+
+cbind(RSS_forward, R2_forward, AR2_forward, Cp_forward,
+      BIC_forward, AIC_forward)
+
+#Plot the RSS and R-square graphs to show the inverse relationship
+
+par(mfrow = c(1,2))
+plot(RSS_forward, xlab = 'Number of Predictors',
+     ylab = 'Forward Subset RSS', type='l', lwd = 2)
+plot(R2_forward, xlab = 'Number of Predictors',
+     ylab = 'R-square', type='l', lwd=2)
+
+
+#Find which are the optimal models using best subset
+
+which.min(Cp_forward)
+which.min(BIC_forward)
+which.max(AR2_forward)
+
+#Plot the optimal model criterion
+
+par(mfrow = c(1, 3))
+plot(Cp_forward, xlab = "Number of Predictors", ylab = "Cp", type = 'l', lwd = 2)
+points(10, Cp_forward[10], col = "red", cex = 2, pch = 8, lwd = 2)
+plot(BIC_forward, xlab = "Number of Predictors", ylab = "BIC", type = 'l', lwd = 2)
+points(6, BIC_forward[6], col = "red", cex = 2, pch = 8, lwd = 2)
+plot(AR2_forward, xlab = "Number of Predictors", ylab = "Adjusted RSq", type = "l", lwd = 2)
+points(11, AR2_forward[11], col = "red", cex = 2, pch = 8, lwd = 2)
+
+#Check backward to verify results
+
+backward <- regsubsets(medv ~., fulldata, nvmax = 13, method = "backward")
+results_backward <- summary(backward)
+names(results_backward)
+summary(backward)
+
+RSS_backward <- results_backward$rss
+R2_backward <- results_backward$rsq
+AR2_backward <- results_backward$adjr2
+Cp_backward <- results_backward$cp
+BIC_backward <- results_backward$bic
+AIC_backward <- results_backward$aic
+
+cbind(RSS_backward, R2_backward, AR2_backward, Cp_backward,
+      BIC_backward, AIC_backward)
+
+which.min(Cp_backward)
+which.min(BIC_forward)
+which.max(AR2_forward)
+
+#Both forward and backward deem 11 predictors as the optimal
+
+coef(best, 11)
+coef(forward, 11)
+coef(backward, 11)
+
+model2 <- lm(medv ~ crim + zn + chas + nox + rm +
+               dis + rad + tax + ptratio + b + lstat, data = fulldata)
+summary(model2)
+
+#Ridge and Lasso analysis
+
+y = fulldata$medv
+x = model.matrix(medv~., fulldata)[,-1]
+head(x)
+
+ridge = glmnet(x, y, alpha = 0)
+
+#Use cross validation to find optimal lambda
+
+ridge.cv <- cv.glmnet(x, y, alpha = 0)
+ridge.cv$lambda.min
+ridge.cv$lambda.1se
+
+results(ridge.cv)
+summary.resample
+
+#The 1se lambda is larger than the min-CV lambda so
+#we expect the coefficients under 1se to be much smaller
+
+round(cbind(coef(ridge.cv, s = 'lambda.min'),
+            coef(ridge.cv, s = 'lambda.1se')),
+      3)
+
+par(mfrow=c(1,1))
+plot(ridge.cv)
+plot(ridge, xvar = 'lambda')
+abline(v = log(ridge.cv$lambda.min), lty = 3)
+abline(v = log(ridge.cv$lambda.1se), lty = 3)
+
+#Lasso
+
+lasso <- glmnet(x,y)
+
+lasso.cv <- cv.glmnet(x,y)
+lasso.cv$lambda.min
+lasso.cv$lambda.1se
+
+round(cbind(
+  coef(lasso.cv, s = 'lambda.min'),
+  coef(lasso.cv, s = 'lambda.1se')),
+  3)
+
+par(mfrow=c(1,2))
+plot(lasso.cv)
+plot(lasso, xvar = 'lambda')
+abline(v = log(lasso.cv$lambda.min), lty = 3)
+abline(v = log(lasso.cv$lambda.1se), lty = 3)
+
+#Compare predictive performance of lasso and ridge
+
+#Create test and training subsets, set seed for reproducible results
+
+repetitions = 50
+cor.3 = c()
+cor.4 = c()
+cor.5 = c()
+set.seed(1)
+
+for(i in 1:repetitions){
+  # Step (i) data splitting
+  
+  training.obs = sample(1:506, 380)
+  y.train = fulldata$medv[training.obs]
+  x.train = model.matrix(medv~., fulldata[training.obs, ])[,-1]
+  y.test = fulldata$medv[-training.obs]
+  x.test = model.matrix(medv~., fulldata[-training.obs, ])[,-1]
+  
+  # Step (ii) training phase
+  
+  ridge.train = cv.glmnet(x.train, y.train, alpha = 0)
+  lasso.train = cv.glmnet(x.train, y.train)
+  
+  # Step (iv) generating predictions
+  
+  predict.1 = predict(ridge.train, x.test, s = 'lambda.min')
+  predict.2 = predict(ridge.train, x.test, s = 'lambda.1se')
+  predict.3 = predict(lasso.train, x.test, s = 'lambda.min')
+  predict.4 = predict(lasso.train, x.test, s = 'lambda.1se')
+  
+  # Step (v) evaluating predictive performance
+  
+  cor.1[i] = cor(y.test, predict.1)
+  cor.2[i] = cor(y.test, predict.2)
+  cor.3[i] = cor(y.test, predict.3)
+  cor.4[i] = cor(y.test, predict.4)
+}
+boxplot(cor.1, cor.2, cor.3, cor.4, 
+        names = c('min-CV ridge', 'min-1se ridge', 'min-CV lasso',
+        'min-1se lasso'), ylab = 'Test correlation',
+        main = 'Ridge and Lasso Test Correlation Plots', col = 4)
+
+predict.regsubsets = function(object, newdata, id, ...){
+  form = as.formula(object$call[[2]])
+  mat = model.matrix(form, newdata)
+  coefi = coef(object, id = id)
+  xvars = names(coefi)
+  mat[, xvars]%*%coefi
+}
+
+#Compare predictive performance of subset, ridge and lasso
+
+repetitions = 50
+cor.cp = c()
+cor.2 = c()
+cor.3 = c()
+set.seed(1234)
+for(i in 1:repetitions){
+  # Step (i) data splitting
+  training.obs = sample(1:506, 380)
+  data.train = fulldata[training.obs, ]
+  data.test = fulldata[-training.obs, ]
+  y.train = fulldata$medv[training.obs]
+  x.train = model.matrix(medv~., fulldata[training.obs, ])[,-1]
+  y.test = fulldata$medv[-training.obs]
+  x.test = model.matrix(medv~., fulldata[-training.obs, ])[,-1]
+  # Step (ii) training phase
+  regfit.train = regsubsets(medv~., data = data.train, nvmax = 13)
+  min.cp = which.min(Cp_best)
+  ridge.train = cv.glmnet(x.train, y.train, alpha = 0)
+  lasso.train = cv.glmnet(x.train, y.train)
+  # Step (iv) generating predictions
+  predict.cp = predict.regsubsets(regfit.train, data.test, min.cp)
+  predict.2 = predict(ridge.train, x.test, s = 'lambda.min')
+  predict.3 = predict(lasso.train, x.test, s = 'lambda.min')
+  # Step (v) evaluating predictive performance
+  cor.cp[i] = cor(data.test$medv, predict.cp)
+  cor.2[i] = cor(y.test, predict.2)
+  cor.3[i] = cor(y.test, predict.3)
+}
+boxplot(cor.cp,
+        cor.2, cor.3, names = c('Cp Best Subset', 
+        'min-CV ridge', 'min-CV lasso'), ylab = 'Test correlation',
+        main = 'Best Subset, Ridge and Lasso Correlation', col = 4)
+
+mean(cor.cp)
+mean(cor.2)
+mean(cor.3)
+
+
+MSE_full <- mean(model1$residuals^2)
+MSE_best <- mean(model2$residuals^2)
+MSE_ridge <- mean((predict.2 - y.test)^2)
+MSE_lasso <- mean((predict.3 - y.test)^2)
+
+cbind( MSE_full, MSE_best, MSE_ridge, MSE_lasso)
+
+
+#Summary of best subset model as preferred model
+
+preferred_model <- lm(medv ~ crim + zn + chas + nox + rm +
+               dis + rad + tax + ptratio + b + lstat, data = fulldata)
+summary(preferred_model)
+plot(preferred_model)
+
+
+car::vif(preferred_model)
